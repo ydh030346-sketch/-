@@ -1,0 +1,19 @@
+{
+  "name": "desk-buddy",
+  "version": "0.1.0",
+  "description": "바탕화면 상주형 AI 비서 (Notion, Google Calendar, Google Tasks 연동)",
+  "main": "src/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "check": "node --check src/main.js && node --check src/agent.js && node --check src/config.js && node --check src/preload.js && node --check src/tools/notion.js && node --check src/tools/google.js && node --check src/renderer/chat.js && node --check src/renderer/character.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.7.0",
+    "@notionhq/client": "^2.3.0",
+    "googleapis": "^189.0.0"
+  },
+  "devDependencies": {
+    "electron": "^45.2.3"
+  }
+}
