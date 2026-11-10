@@ -7,7 +7,7 @@
   "scripts": {
     "start": "electron .",
     "check": "node --check src/main.js && node --check src/agent.js && node --check src/config.js && node --check src/preload.js && node --check src/tools/notion.js && node --check src/tools/google.js && node --check src/renderer/chat.js && node --check src/renderer/character.js",
-    "dist": "electron-builder --win nsis --x64"
+    "dist": "electron-builder --win nsis --x64 --publish never"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.7.0",
