@@ -6,7 +6,8 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "check": "node --check src/main.js && node --check src/agent.js && node --check src/config.js && node --check src/preload.js && node --check src/tools/notion.js && node --check src/tools/google.js && node --check src/renderer/chat.js && node --check src/renderer/character.js"
+    "check": "node --check src/main.js && node --check src/agent.js && node --check src/config.js && node --check src/preload.js && node --check src/tools/notion.js && node --check src/tools/google.js && node --check src/renderer/chat.js && node --check src/renderer/character.js",
+    "dist": "electron-builder --win nsis --x64"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.7.0",
@@ -14,6 +15,41 @@
     "googleapis": "^189.0.0"
   },
   "devDependencies": {
-    "electron": "^45.2.3"
+    "electron": "^45.2.3",
+    "electron-builder": "^26.0.12"
+  },
+  "author": "desk-buddy",
+  "build": {
+    "appId": "com.deskbuddy.app",
+    "productName": "DeskBuddy",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "DeskBuddy-Setup-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "데스크 비서",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    }
   }
 }

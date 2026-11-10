@@ -1,0 +1,36 @@
+name: Windows 설치 파일 빌드
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run dist
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      # 스모크 테스트: 빌드된 앱이 실제 Windows에서 켜져서 15초간 살아 있는지 확인
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "dist\win-unpacked\DeskBuddy.exe" -PassThru
+          Start-Sleep -Seconds 15
+          if ($p.HasExited) { Write-Error "앱이 종료됨 (exit $($p.ExitCode))"; exit 1 }
+          Write-Host "앱 실행 확인"
+          Get-Process DeskBuddy | Stop-Process -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DeskBuddy-Setup
+          path: dist/DeskBuddy-Setup-*.exe
+          retention-days: 30

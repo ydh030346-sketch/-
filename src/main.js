@@ -104,6 +104,14 @@ function createTray() {
       { label: "캐릭터 숨기기/보이기", click: () => (characterWin.isVisible() ? characterWin.hide() : characterWin.show()) },
       { label: "새 대화", click: () => { agent.reset(); chatWin.webContents.send("chat:cleared"); } },
       { type: "separator" },
+      {
+        label: "Windows 시작 시 자동 실행",
+        type: "checkbox",
+        enabled: app.isPackaged,
+        checked: app.isPackaged && app.getLoginItemSettings().openAtLogin,
+        click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }),
+      },
+      { type: "separator" },
       { label: "종료", click: () => { app.isQuitting = true; app.quit(); } },
     ])
   );
@@ -171,12 +179,15 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.whenReady().then(() => {
+    // 설치 후 첫 실행 때만 자동 실행을 켠다. 이후엔 트레이 메뉴에서 사용자가 끄고 켤 수 있다.
+    if (app.isPackaged && !config.load().autoStartInitialized) {
+      app.setLoginItemSettings({ openAtLogin: true });
+      config.save({ autoStartInitialized: true });
+    }
     createCharacter();
     createChat();
     createTray();
     globalShortcut.register("CommandOrControl+Shift+Space", toggleChat);
-    // 로그인 시 자동 실행 (Windows/macOS)
-    if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: true });
   });
   app.on("second-instance", () => toggleChat());
   app.on("will-quit", () => globalShortcut.unregisterAll());
