@@ -249,6 +249,8 @@ class Agent {
         const msg = String(e && e.message || e);
         if (/not found|404/i.test(msg)) throw new Error(`모델 '${model}'을(를) 쓸 수 없습니다. 설정(⚙)에서 '모델 목록 불러오기'로 다시 고르세요.`);
         if (/API key|permission|401|403/i.test(msg)) throw new Error("Gemini API 키가 올바르지 않거나 권한이 없습니다.");
+        if (/prepayment|prepay|credits are depleted|402/i.test(msg)) throw new Error("Gemini 선불 크레딧이 모두 소진되었습니다. AI Studio(ai.studio/projects) → 결제에서 크레딧을 충전하세요.");
+        if (/billing/i.test(msg)) throw new Error("Gemini 결제 설정에 문제가 있습니다. AI Studio(ai.studio/projects)에서 결제 상태를 확인하세요.");
         if (/quota|429|exhausted/i.test(msg)) throw new Error("Gemini 사용 한도를 넘었습니다. 잠시 후 다시 시도하세요.");
         throw e;
       }
@@ -343,10 +345,12 @@ async function listGeminiModels(apiKey) {
     const actions = m.supportedActions || [];
     if (!name.startsWith("gemini")) continue;
     if (actions.length && !actions.includes("generateContent")) continue;
-    if (/image|tts|audio|live|embedding|robotics|computer-use/i.test(name)) continue;
+    if (/image|banana|tts|audio|live|embedding|robotics|computer-use|transcribe|customtools|deep-research|antigravity|lyria|veo/i.test(name)) continue;
     out.push({ id: name, label: m.displayName || name });
   }
-  return out.sort((a, b) => b.id.localeCompare(a.id));
+  // 최신 별칭(-latest) 먼저, 나머지는 버전 높은 순
+  const rank = (id) => (id.endsWith("-latest") ? 0 : 1);
+  return out.sort((a, b) => rank(a.id) - rank(b.id) || b.id.localeCompare(a.id, "en", { numeric: true }));
 }
 
 module.exports = { Agent, TOOLS, WRITE_TOOLS, STUDENT_PATTERN, listGeminiModels };
