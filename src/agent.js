@@ -1,10 +1,11 @@
-// Claude 에이전트 루프. 읽기 도구는 바로 실행하고, 쓰기 도구(생성/삭제/완료)는
-// 반드시 사용자 확인(confirm 콜백)을 거친다.
+// AI 에이전트 루프 (Gemini 또는 Claude). 읽기 도구는 바로 실행하고,
+// 쓰기 도구(생성/삭제/완료)는 반드시 사용자 확인(confirm 콜백)을 거친다.
 const Anthropic = require("@anthropic-ai/sdk");
+const { GoogleGenAI } = require("@google/genai");
 const notion = require("./tools/notion");
 const gg = require("./tools/google");
 
-const SYSTEM = `당신은 사용자의 바탕화면에 상주하는 한국어 업무 비서입니다. 사용자는 교사입니다.
+const SYSTEM = `당신은 사용자의 바탕화면에 상주하는 한국어 업무 비서입니다.{{STUDENT_POLICY}} 사용자는 교사입니다.
 도구를 사용해 Notion, Google Calendar, Google Tasks에 실제로 일을 처리합니다.
 
 원칙:
@@ -136,17 +137,35 @@ function validate(tool, input) {
   return null;
 }
 
+// 학생 관찰기록 관련 요청인지 (무료 등급 키일 때 아예 전송하지 않기 위한 로컬 검사)
+const STUDENT_PATTERN = /관찰\s*기록|관찰\s*내용|생기부|생활\s*기록부|학생부|행동\s*특성|행특|세특|세부\s*능력|종합\s*의견|상담\s*기록/;
+
+const FREE_TIER_POLICY = `
+[중요] 현재 사용 중인 API 키는 결제가 연결되지 않은 무료 등급일 수 있어 입력이 모델 학습에 쓰일 수 있습니다. 학생 관찰기록, 학생 실명이 들어간 기록, 상담 내용은 작성하거나 저장하지 마세요. 그런 요청이 오면 "설정에서 결제 연결을 확인하거나 Claude 앱에서 처리하세요"라고만 답하세요.`;
+
+function systemPrompt(cfg) {
+  const paid = cfg.provider === "claude" || cfg.geminiPaidConfirmed;
+  return SYSTEM.replace("{{STUDENT_POLICY}}", paid ? "" : FREE_TIER_POLICY);
+}
+
+function nowLine(cfg) {
+  const now = new Date().toLocaleString("ko-KR", { timeZone: cfg.timezone, dateStyle: "full", timeStyle: "short" });
+  return `[현재 시각: ${now} (${cfg.timezone}, UTC+09:00)]`;
+}
+
 class Agent {
   constructor({ getConfig, saveGoogleToken, confirm, onStatus }) {
     this.getConfig = getConfig;
     this.saveGoogleToken = saveGoogleToken;
     this.confirm = confirm;
     this.onStatus = onStatus || (() => {});
-    this.messages = [];
+    this.reset();
   }
 
   reset() {
-    this.messages = [];
+    this.messages = []; // Claude 형식 대화 기록
+    this.contents = []; // Gemini 형식 대화 기록
+    this.provider = null;
   }
 
   async runTool(name, input) {
@@ -166,32 +185,119 @@ class Agent {
     }
   }
 
-  async send(userText) {
-    const start = this.messages.length;
+  // 공통: 도구 하나 실행 (검증 → 쓰기면 승인 → 실행). 결과는 { error?: string, output?: any }
+  async execute(name, input) {
+    const tool = TOOLS.find((t) => t.name === name);
+    const err = tool ? validate(tool, input) : `알 수 없는 도구: ${name}`;
+    if (err) return { error: err };
+    if (WRITE_TOOLS.has(name)) {
+      const ok = await this.confirm(describeAction(name, input));
+      if (!ok) return { error: "사용자가 이 작업을 거절했습니다. 실행하지 않았습니다." };
+    }
+    this.onStatus(`${name} 실행 중…`);
     try {
-      return await this._send(userText);
+      return { output: await this.runTool(name, input) };
     } catch (e) {
-      // 실패한 턴은 대화 기록에서 되돌려 다음 요청이 깨지지 않게 한다.
-      this.messages.length = start;
+      return { error: `오류: ${e.message}` };
+    }
+  }
+
+  async send(userText) {
+    const cfg = this.getConfig();
+    const provider = cfg.provider === "claude" ? "claude" : "gemini";
+    if (this.provider && this.provider !== provider) this.reset(); // AI를 바꾸면 새 대화
+    this.provider = provider;
+
+    if (provider === "gemini" && !cfg.geminiPaidConfirmed && STUDENT_PATTERN.test(userText)) {
+      return "학생 관찰기록·상담 내용은 보내지 않았습니다. 결제가 연결된 Gemini API 키라면 설정(⚙)에서 '결제 연결됨'을 체크하세요. 무료 등급 키는 입력이 학습에 쓰일 수 있습니다.";
+    }
+
+    const hist = provider === "claude" ? this.messages : this.contents;
+    const start = hist.length;
+    try {
+      return provider === "claude" ? await this.sendClaude(cfg, userText) : await this.sendGemini(cfg, userText);
+    } catch (e) {
+      hist.length = start; // 실패한 턴은 되돌려 다음 요청이 깨지지 않게 한다.
       throw e;
     }
   }
 
-  async _send(userText) {
-    const cfg = this.getConfig();
+  // ---------------- Gemini ----------------
+  async sendGemini(cfg, userText) {
+    if (!cfg.geminiApiKey) throw new Error("Gemini API 키가 설정되지 않았습니다. 설정(⚙)에서 입력하세요.");
+    const ai = new GoogleGenAI({ apiKey: cfg.geminiApiKey });
+    const model = cfg.geminiModel || "gemini-pro-latest";
+    const tools = [{ functionDeclarations: TOOLS.map((t) => ({ name: t.name, description: t.description, parametersJsonSchema: t.input_schema })) }];
+
+    this.contents.push({ role: "user", parts: [{ text: `${nowLine(cfg)}\n${userText}` }] });
+
+    for (let step = 0; step < 12; step++) {
+      this.onStatus("생각 중…");
+      let response;
+      try {
+        response = await ai.models.generateContent({
+          model,
+          contents: this.contents,
+          config: {
+            systemInstruction: systemPrompt(cfg),
+            tools,
+            // 자동 함수 호출은 끄고 직접 실행한다 (승인 카드를 거치기 위해)
+            automaticFunctionCalling: { disable: true },
+          },
+        });
+      } catch (e) {
+        const msg = String(e && e.message || e);
+        if (/not found|404/i.test(msg)) throw new Error(`모델 '${model}'을(를) 쓸 수 없습니다. 설정(⚙)에서 '모델 목록 불러오기'로 다시 고르세요.`);
+        if (/API key|permission|401|403/i.test(msg)) throw new Error("Gemini API 키가 올바르지 않거나 권한이 없습니다.");
+        if (/quota|429|exhausted/i.test(msg)) throw new Error("Gemini 사용 한도를 넘었습니다. 잠시 후 다시 시도하세요.");
+        throw e;
+      }
+
+      const cand = response.candidates && response.candidates[0];
+      if (!cand || !cand.content) {
+        const reason = (cand && cand.finishReason) || (response.promptFeedback && response.promptFeedback.blockReason) || "알 수 없음";
+        return `응답을 받지 못했습니다 (사유: ${reason}). 표현을 바꿔 다시 말해 주세요.`;
+      }
+      // 모델 응답은 그대로 보존해야 한다 (함수 호출의 thought signature 포함)
+      this.contents.push(cand.content);
+
+      const parts = cand.content.parts || [];
+      const calls = parts.filter((p) => p.functionCall).map((p) => p.functionCall);
+      const text = parts.filter((p) => p.text && !p.thought).map((p) => p.text).join("\n").trim();
+      if (!calls.length) {
+        if (cand.finishReason === "MAX_TOKENS") return (text ? text + "\n\n" : "") + "(응답이 너무 길어 중간에 잘렸습니다.)";
+        return text || "완료했습니다.";
+      }
+
+      const responses = [];
+      for (const call of calls) {
+        const r = await this.execute(call.name, call.args || {});
+        responses.push({
+          functionResponse: {
+            id: call.id,
+            name: call.name,
+            response: r.error ? { error: r.error } : { output: r.output },
+          },
+        });
+      }
+      this.contents.push({ role: "user", parts: responses });
+    }
+    return "작업 단계가 너무 많아 중단했습니다. 요청을 나눠서 다시 말해 주세요.";
+  }
+
+  // ---------------- Claude ----------------
+  async sendClaude(cfg, userText) {
     if (!cfg.anthropicApiKey) throw new Error("Anthropic API 키가 설정되지 않았습니다. 설정(⚙)에서 입력하세요.");
     const client = new Anthropic({ apiKey: cfg.anthropicApiKey });
-
-    const now = new Date().toLocaleString("ko-KR", { timeZone: cfg.timezone, dateStyle: "full", timeStyle: "short" });
     // 현재 시각은 system이 아니라 사용자 턴에 넣어 프롬프트 캐시를 깨지 않는다.
-    this.messages.push({ role: "user", content: `[현재 시각: ${now} (${cfg.timezone}, UTC+09:00)]\n${userText}` });
+    this.messages.push({ role: "user", content: `${nowLine(cfg)}\n${userText}` });
 
     for (let step = 0; step < 12; step++) {
       this.onStatus("생각 중…");
       const response = await client.beta.messages.create({
         model: cfg.model || "claude-opus-5-5",
         max_tokens: 16000,
-        system: SYSTEM,
+        system: systemPrompt(cfg),
         tools: TOOLS,
         thinking: { type: "adaptive" },
         output_config: { effort: "medium" },
@@ -214,26 +320,12 @@ class Agent {
       const results = [];
       for (const block of response.content) {
         if (block.type !== "tool_use") continue;
-        const tool = TOOLS.find((t) => t.name === block.name);
-        const err = tool ? validate(tool, block.input) : `알 수 없는 도구: ${block.name}`;
-        if (err) {
-          results.push({ type: "tool_result", tool_use_id: block.id, is_error: true, content: err });
-          continue;
-        }
-        if (WRITE_TOOLS.has(block.name)) {
-          const ok = await this.confirm(describeAction(block.name, block.input));
-          if (!ok) {
-            results.push({ type: "tool_result", tool_use_id: block.id, is_error: true, content: "사용자가 이 작업을 거절했습니다. 실행하지 않았습니다." });
-            continue;
-          }
-        }
-        this.onStatus(`${block.name} 실행 중…`);
-        try {
-          const out = await this.runTool(block.name, block.input);
-          results.push({ type: "tool_result", tool_use_id: block.id, content: JSON.stringify(out) });
-        } catch (e) {
-          results.push({ type: "tool_result", tool_use_id: block.id, is_error: true, content: `오류: ${e.message}` });
-        }
+        const r = await this.execute(block.name, block.input);
+        results.push(
+          r.error
+            ? { type: "tool_result", tool_use_id: block.id, is_error: true, content: r.error }
+            : { type: "tool_result", tool_use_id: block.id, content: JSON.stringify(r.output) }
+        );
       }
       this.messages.push({ role: "user", content: results });
     }
@@ -241,4 +333,20 @@ class Agent {
   }
 }
 
-module.exports = { Agent, TOOLS, WRITE_TOOLS };
+// 설정 화면용: 이 키로 쓸 수 있는 Gemini 텍스트 모델 목록
+async function listGeminiModels(apiKey) {
+  const ai = new GoogleGenAI({ apiKey });
+  const out = [];
+  const pager = await ai.models.list({ config: { pageSize: 100 } });
+  for await (const m of pager) {
+    const name = String(m.name || "").replace(/^models\//, "");
+    const actions = m.supportedActions || [];
+    if (!name.startsWith("gemini")) continue;
+    if (actions.length && !actions.includes("generateContent")) continue;
+    if (/image|tts|audio|live|embedding|robotics|computer-use/i.test(name)) continue;
+    out.push({ id: name, label: m.displayName || name });
+  }
+  return out.sort((a, b) => b.id.localeCompare(a.id));
+}
+
+module.exports = { Agent, TOOLS, WRITE_TOOLS, STUDENT_PATTERN, listGeminiModels };

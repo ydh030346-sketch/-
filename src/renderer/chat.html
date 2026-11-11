@@ -16,7 +16,7 @@
 </header>
 
 <main id="log">
-  <div class="msg bot">무엇을 도와드릴까요?<br><small>예) "내일 3시에 학부모 상담 일정 잡아줘", "김민준 오늘 관찰: 모둠활동에서 친구 의견을 먼저 들어줌. 관찰기록 써서 노션에 넣어줘"</small></div>
+  <div class="msg bot">무엇을 도와드릴까요?<br><small>예) "내일 3시에 학부모 상담 일정 잡아줘", "김민준 오늘 관찰: 모둠활동에서 친구 의견을 먼저 들어줌. 관찰기록 써서 노션에 넣어줘"<br>처음이면 ⚙에서 Gemini API 키부터 넣으세요.</small></div>
 </main>
 
 <form id="composer">
@@ -26,7 +26,23 @@
 
 <section id="settings" hidden>
   <h3>설정</h3>
-  <label>Anthropic API 키 <input name="anthropicApiKey" type="password" autocomplete="off"></label>
+  <label>사용할 AI
+    <select name="provider">
+      <option value="gemini">Gemini (Google)</option>
+      <option value="claude">Claude (Anthropic)</option>
+    </select>
+  </label>
+  <fieldset data-provider="gemini">
+    <label>Gemini API 키 <input name="geminiApiKey" type="password" autocomplete="off"></label>
+    <label>모델
+      <span class="row"><select name="geminiModel"><option value="gemini-pro-latest">gemini-pro-latest</option></select><button type="button" id="btnModels">모델 목록 불러오기</button></span>
+    </label>
+    <label class="check"><input type="checkbox" name="geminiPaidConfirmed"> 이 키의 프로젝트에 결제가 연결됨 (유료 등급)</label>
+    <small class="warn">결제가 연결되지 않은 키(무료 등급)는 입력이 Google 모델 학습에 쓰일 수 있습니다. 체크하지 않으면 학생 관찰기록·상담 관련 요청은 보내지 않습니다. Gemini 앱 구독(Google AI Pro 등)만으로는 유료 등급이 되지 않습니다.</small>
+  </fieldset>
+  <fieldset data-provider="claude">
+    <label>Anthropic API 키 <input name="anthropicApiKey" type="password" autocomplete="off"></label>
+  </fieldset>
   <label>Notion 통합 토큰 <input name="notionToken" type="password" autocomplete="off"></label>
   <label>Notion 관찰기록 데이터베이스 ID (선택) <input name="notionDatabaseId"></label>
   <label>Notion 기본 상위 페이지 ID (선택) <input name="notionParentPageId"></label>

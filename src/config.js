@@ -3,9 +3,16 @@ const { app, safeStorage } = require("electron");
 const fs = require("fs");
 const path = require("path");
 
-const SECRET_KEYS = ["anthropicApiKey", "notionToken", "googleToken"];
+const SECRET_KEYS = ["geminiApiKey", "anthropicApiKey", "notionToken", "googleToken"];
 
 const DEFAULTS = {
+  // 사용할 AI: "gemini" 또는 "claude"
+  provider: "gemini",
+  geminiApiKey: "",
+  geminiModel: "gemini-pro-latest",
+  // 이 키의 Google 프로젝트에 결제(유료 등급)가 연결되어 있다고 사용자가 확인했는지.
+  // false면 학생 관찰기록 관련 요청은 전송 자체를 막는다 (무료 등급은 입력이 학습에 쓰일 수 있음).
+  geminiPaidConfirmed: false,
   anthropicApiKey: "",
   notionToken: "",
   // 관찰기록 등을 넣을 Notion 데이터베이스 ID (선택). 없으면 notionParentPageId 아래에 하위 페이지로 만든다.

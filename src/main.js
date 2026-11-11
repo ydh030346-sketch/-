@@ -3,7 +3,7 @@ const { app, BrowserWindow, ipcMain, Tray, Menu, screen, globalShortcut, nativeI
 const path = require("path");
 const config = require("./config");
 const google = require("./tools/google");
-const { Agent } = require("./agent");
+const { Agent, listGeminiModels } = require("./agent");
 
 let characterWin = null;
 let chatWin = null;
@@ -159,6 +159,15 @@ ipcMain.handle("settings:save", (_e, partial) => {
     clean[k] = typeof v === "string" ? v.trim() : v;
   }
   return config.publicView(config.save(clean));
+});
+ipcMain.handle("settings:listGeminiModels", async () => {
+  try {
+    const key = config.load().geminiApiKey;
+    if (!key) return { ok: false, error: "먼저 Gemini API 키를 저장하세요." };
+    return { ok: true, models: await listGeminiModels(key) };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
 });
 ipcMain.handle("settings:pickGoogleFile", async () => {
   const r = await dialog.showOpenDialog(chatWin, { filters: [{ name: "JSON", extensions: ["json"] }], properties: ["openFile"] });

@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld("api", {
   // 설정
   getSettings: () => ipcRenderer.invoke("settings:get"),
   saveSettings: (s) => ipcRenderer.invoke("settings:save", s),
+  listGeminiModels: () => ipcRenderer.invoke("settings:listGeminiModels"),
   pickGoogleFile: () => ipcRenderer.invoke("settings:pickGoogleFile"),
   googleLogin: () => ipcRenderer.invoke("settings:googleLogin"),
 });

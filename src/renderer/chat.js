@@ -65,20 +65,54 @@ window.api.onConfirm(({ id, title, detail }) => {
 });
 
 // 설정
-const fields = () => [...settings.querySelectorAll("input[name]")];
+const fields = () => [...settings.querySelectorAll("input[name], select[name]")];
+const providerSel = settings.querySelector("select[name=provider]");
+const modelSel = settings.querySelector("select[name=geminiModel]");
+
+function showProvider() {
+  for (const fs of settings.querySelectorAll("fieldset[data-provider]")) fs.hidden = fs.dataset.provider !== providerSel.value;
+}
+providerSel.onchange = showProvider;
+
+function ensureModelOption(id) {
+  if (id && ![...modelSel.options].some((o) => o.value === id)) modelSel.add(new Option(id, id));
+}
+
 async function openSettings() {
   const s = await window.api.getSettings();
-  for (const f of fields()) f.value = s[f.name] || "";
+  ensureModelOption(s.geminiModel);
+  for (const f of fields()) {
+    if (f.type === "checkbox") f.checked = !!s[f.name];
+    else f.value = s[f.name] ?? "";
+  }
+  showProvider();
   document.getElementById("googleState").textContent = s.googleToken ? "연결됨" : "미연결";
   settings.hidden = false;
 }
 document.getElementById("btnSettings").onclick = () => (settings.hidden ? openSettings() : (settings.hidden = true));
 document.getElementById("btnCancelSettings").onclick = () => (settings.hidden = true);
 document.getElementById("btnSaveSettings").onclick = async () => {
-  const data = Object.fromEntries(fields().map((f) => [f.name, f.value]));
+  const data = Object.fromEntries(fields().map((f) => [f.name, f.type === "checkbox" ? f.checked : f.value]));
   await window.api.saveSettings(data);
   settings.hidden = true;
   add("bot", "설정을 저장했습니다.");
+};
+document.getElementById("btnModels").onclick = async (e) => {
+  const btn = e.currentTarget;
+  // 방금 입력한 키를 먼저 저장해야 목록을 불러올 수 있다
+  await window.api.saveSettings({ geminiApiKey: settings.querySelector("input[name=geminiApiKey]").value });
+  btn.disabled = true;
+  btn.textContent = "불러오는 중…";
+  const r = await window.api.listGeminiModels();
+  btn.disabled = false;
+  btn.textContent = "모델 목록 불러오기";
+  if (!r.ok) return alert(`모델 목록을 불러오지 못했습니다: ${r.error}`);
+  const cur = modelSel.value;
+  modelSel.innerHTML = "";
+  for (const alias of ["gemini-pro-latest", "gemini-flash-latest"]) modelSel.add(new Option(`${alias} (항상 최신)`, alias));
+  for (const m of r.models) if (!m.id.endsWith("-latest")) modelSel.add(new Option(`${m.label} (${m.id})`, m.id));
+  ensureModelOption(cur);
+  modelSel.value = cur;
 };
 document.getElementById("btnPick").onclick = async () => {
   const p = await window.api.pickGoogleFile();
