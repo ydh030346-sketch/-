@@ -9,7 +9,8 @@ const DEFAULTS = {
   // 사용할 AI: "gemini" 또는 "claude"
   provider: "gemini",
   geminiApiKey: "",
-  geminiModel: "gemini-pro-latest",
+  // 무료 등급 키에서도 쓸 수 있는 Flash를 기본으로 (Pro는 무료 한도가 없거나 매우 적을 수 있음)
+  geminiModel: "gemini-flash-latest",
   // 이 키의 Google 프로젝트에 결제(유료 등급)가 연결되어 있다고 사용자가 확인했는지.
   // false면 학생 관찰기록 관련 요청은 전송 자체를 막는다 (무료 등급은 입력이 학습에 쓰일 수 있음).
   geminiPaidConfirmed: false,

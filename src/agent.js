@@ -226,7 +226,7 @@ class Agent {
   async sendGemini(cfg, userText) {
     if (!cfg.geminiApiKey) throw new Error("Gemini API 키가 설정되지 않았습니다. 설정(⚙)에서 입력하세요.");
     const ai = new GoogleGenAI({ apiKey: cfg.geminiApiKey });
-    const model = cfg.geminiModel || "gemini-pro-latest";
+    const model = cfg.geminiModel || "gemini-flash-latest";
     const tools = [{ functionDeclarations: TOOLS.map((t) => ({ name: t.name, description: t.description, parametersJsonSchema: t.input_schema })) }];
 
     this.contents.push({ role: "user", parts: [{ text: `${nowLine(cfg)}\n${userText}` }] });
@@ -251,7 +251,7 @@ class Agent {
         if (/API key|permission|401|403/i.test(msg)) throw new Error("Gemini API 키가 올바르지 않거나 권한이 없습니다.");
         if (/prepayment|prepay|credits are depleted|402/i.test(msg)) throw new Error("Gemini 선불 크레딧이 모두 소진되었습니다. AI Studio(ai.studio/projects) → 결제에서 크레딧을 충전하세요.");
         if (/billing/i.test(msg)) throw new Error("Gemini 결제 설정에 문제가 있습니다. AI Studio(ai.studio/projects)에서 결제 상태를 확인하세요.");
-        if (/quota|429|exhausted/i.test(msg)) throw new Error("Gemini 사용 한도를 넘었습니다. 잠시 후 다시 시도하세요.");
+        if (/quota|429|exhausted/i.test(msg)) throw new Error(`Gemini 사용 한도를 넘었습니다. 무료 키라면 분당/일일 한도에 걸린 것이니 잠시 후 다시 시도하거나, 설정에서 더 가벼운 모델(gemini-flash-lite-latest)을 고르세요. (모델: ${model})`);
         throw e;
       }
 

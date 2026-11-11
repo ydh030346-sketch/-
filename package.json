@@ -1,6 +1,6 @@
 {
   "name": "desk-buddy",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "바탕화면 상주형 AI 비서 (Notion, Google Calendar, Google Tasks 연동)",
   "main": "src/main.js",
   "private": true,

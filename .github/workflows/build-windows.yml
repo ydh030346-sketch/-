@@ -6,6 +6,9 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -34,3 +37,18 @@ jobs:
           name: DeskBuddy-Setup
           path: dist/DeskBuddy-Setup-*.exe
           retention-days: 30
+      # 저장소 첫 화면 오른쪽 "Releases"에 설치 파일을 올린다 (버전마다 하나)
+      - name: Read version
+        id: ver
+        shell: bash
+        run: echo "v=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.v }}
+          target_commitish: ${{ github.sha }}
+          name: 데스크 비서 v${{ steps.ver.outputs.v }}
+          body: |
+            아래 **Assets**의 `DeskBuddy-Setup-${{ steps.ver.outputs.v }}.exe`를 받아 실행하세요.
+            "Windows의 PC 보호" 창이 뜨면 **추가 정보 → 실행**을 누르면 됩니다 (코드 서명 인증서가 없어서 뜨는 경고).
+          files: dist/DeskBuddy-Setup-*.exe
+          make_latest: true

@@ -109,7 +109,7 @@ document.getElementById("btnModels").onclick = async (e) => {
   if (!r.ok) return alert(`모델 목록을 불러오지 못했습니다: ${r.error}`);
   const cur = modelSel.value;
   modelSel.innerHTML = "";
-  for (const alias of ["gemini-pro-latest", "gemini-flash-latest"]) modelSel.add(new Option(`${alias} (항상 최신)`, alias));
+  for (const alias of ["gemini-flash-latest", "gemini-pro-latest", "gemini-flash-lite-latest"]) modelSel.add(new Option(`${alias} (항상 최신)`, alias));
   for (const m of r.models) if (!m.id.endsWith("-latest")) modelSel.add(new Option(`${m.label} (${m.id})`, m.id));
   ensureModelOption(cur);
   modelSel.value = cur;
